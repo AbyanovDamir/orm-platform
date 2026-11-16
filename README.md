@@ -10,11 +10,10 @@
 
 ### 1. Клонирование
 
-Откройте PowerShell в папке, куда хотите скачать проект. Введите HTTPS-адрес **репозитория этого проекта** со страницы **Code → HTTPS**.
+Откройте PowerShell в папке, куда хотите скачать проект.
 
 ```powershell
-$repo = Read-Host 'HTTPS-адрес репозитория orm-platform'
-git clone $repo orm-platform
+git clone https://github.com/AbyanovDamir/orm-platform.git
 Set-Location orm-platform
 ```
 
@@ -270,5 +269,11 @@ POST /api/quizzes/1/attempts
 15 интеграционных тестов проверяют схему, CRUD, каскадное удаление, уникальность записи, дедлайн, сдачу и оценивание работ, прохождение теста, отзывы, HTTP-валидацию и поведение LAZY. Четыре модульных теста проверяют правила начисления баллов. При локальной проверке все 19 тестов прошли на H2 2.3.232 и PostgreSQL 16.9.
 
 ## Публикация для сдачи
+
+### Проверки и доставка сборки
+
+Workflow [Verify and deliver](https://github.com/AbyanovDamir/orm-platform/actions/workflows/ci.yml) запускает тесты на PostgreSQL 16, проверяет исходный и тестовый код через Checkstyle и проверяет запуск демопроекта через Docker Compose. После успешной сборки JAR доступен в разделе Artifacts у запуска workflow.
+
+При отправке тега с префиксом `v`, например `v1.0.0`, workflow публикует образ в GitHub Container Registry после прохождения обеих проверок. У образа будет тот же тег, например `ghcr.io/abyanovdamir/orm-platform:v1.0.0`. Доступ к скачиванию регулируется видимостью пакета на GitHub.
 
 Распакуйте проект и отправьте содержимое каталога `orm-platform` в свой публичный GitHub-репозиторий. Проверьте выполнение workflow `Verify` и передайте ссылку через форму сдачи.
