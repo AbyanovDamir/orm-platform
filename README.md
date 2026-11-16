@@ -22,8 +22,6 @@ git clone https://github.com/AbyanovDamir/orm-platform.git
 cd orm-platform
 ```
 
-Пока [PR №1](https://github.com/AbyanovDamir/orm-platform/pull/1) открыт, для проверки его версии после клонирования выполните `git switch --track origin/codex/ci-cd`. Если локальная ветка уже существует, достаточно `git switch codex/ci-cd`.
-
 При работе с ZIP распакуйте его и перейдите в каталог `orm-platform`, где лежит `pom.xml`. Остальные команды выполняются из этого каталога.
 
 ### 2. Сборка
