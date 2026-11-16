@@ -43,6 +43,7 @@ jobs:
     timeout-minutes: 15
     env:
       DB_PASSWORD: compose-test-only
+      IMAGE_REGISTRY: public.ecr.aws/docker/library
     steps:
       - uses: actions/checkout@v4
       - name: Start PostgreSQL and the application
