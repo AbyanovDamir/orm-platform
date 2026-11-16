@@ -1,4 +1,5 @@
-FROM maven:3.9-eclipse-temurin-17 AS sources
+ARG IMAGE_REGISTRY=docker.io/library
+FROM ${IMAGE_REGISTRY}/maven:3.9-eclipse-temurin-17 AS sources
 WORKDIR /workspace
 COPY pom.xml .
 COPY checkstyle.xml .
@@ -18,11 +19,11 @@ RUN --mount=type=cache,id=orm-platform-maven,target=/root/.m2/repository,sharing
     done; \
     exit 1
 
-FROM alpine:3.22 AS tools
+FROM ${IMAGE_REGISTRY}/alpine:3.22 AS tools
 RUN apk add --no-cache bash curl jq
 CMD ["bash"]
 
-FROM eclipse-temurin:17-jre
+FROM ${IMAGE_REGISTRY}/eclipse-temurin:17-jre
 WORKDIR /app
 COPY --from=build /workspace/target/orm-platform-1.0.0.jar app.jar
 USER 10001

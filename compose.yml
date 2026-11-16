@@ -1,7 +1,12 @@
+x-build: &project-build
+  context: .
+  args:
+    IMAGE_REGISTRY: ${IMAGE_REGISTRY:-docker.io/library}
+
 x-maven-test: &maven-test
   image: orm-platform-test:local
   build:
-    context: .
+    <<: *project-build
     target: sources
   command: ["mvn", "-B", "verify"]
   volumes:
@@ -9,7 +14,7 @@ x-maven-test: &maven-test
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: ${IMAGE_REGISTRY:-docker.io/library}/postgres:16-alpine
     environment:
       POSTGRES_DB: platform
       POSTGRES_USER: platform
@@ -24,7 +29,7 @@ services:
       timeout: 3s
       retries: 15
   app:
-    build: .
+    build: *project-build
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/platform
       DB_USER: platform
@@ -52,7 +57,7 @@ services:
         condition: service_healthy
 
   postgres-test:
-    image: postgres:16-alpine
+    image: ${IMAGE_REGISTRY:-docker.io/library}/postgres:16-alpine
     profiles: [test]
     environment:
       POSTGRES_DB: platform_test
@@ -69,7 +74,7 @@ services:
   tools:
     profiles: [tools]
     build:
-      context: .
+      <<: *project-build
       target: tools
 
 volumes:

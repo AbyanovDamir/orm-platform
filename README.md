@@ -36,6 +36,22 @@ Docker собирает JAR во временном слое Maven и помещ
 
 Если сборка остановилась на `Failed to read artifact descriptor` после сбоя доступа к Maven Central, повторите `sudo docker compose build app`. BuildKit сохраняет уже скачанные зависимости между сборками, а Maven повторяет загрузки и перепроверяет ранее недоступные артефакты.
 
+#### Если Docker Hub недоступен на ВМ
+
+Если при чтении метаданных базового образа видите `failed to fetch anonymous token` и `auth.docker.io`, проверьте загрузку того же официального образа через Amazon ECR Public.
+
+```bash
+sudo docker pull public.ecr.aws/docker/library/maven:3.9-eclipse-temurin-17
+```
+
+Если загрузка прошла, откройте `.env` в редакторе и добавьте строку ниже. Сохраните действующее значение `DB_PASSWORD`.
+
+```dotenv
+IMAGE_REGISTRY=public.ecr.aws/docker/library
+```
+
+Повторите `sudo docker compose build app` и перейдите к шагу 3. Compose будет использовать тот же реестр для Maven, Java, PostgreSQL и Alpine. Настройка действует в пределах проекта. Сборка по-прежнему должна иметь доступ к Maven Central для загрузки библиотек.
+
 ### 3. Запуск приложения
 
 ```bash
