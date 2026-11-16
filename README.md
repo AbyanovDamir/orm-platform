@@ -27,6 +27,8 @@ cd orm-platform
 ### 2. Сборка
 
 ```bash
+
+sudo docker pull public.ecr.aws/docker/library/maven:3.9-eclipse-temurin-17
 sudo docker compose version
 sudo test -f .env || sudo cp .env.example .env
 sudo docker compose build app
