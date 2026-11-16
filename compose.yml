@@ -1,3 +1,12 @@
+x-maven-test: &maven-test
+  image: orm-platform-test:local
+  build:
+    context: .
+    target: sources
+  command: ["mvn", "-B", "verify"]
+  volumes:
+    - maven-cache:/root/.m2
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -10,7 +19,7 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U platform -d platform"]
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "platform", "-d", "platform"]
       interval: 3s
       timeout: 3s
       retries: 15
@@ -26,5 +35,43 @@ services:
         condition: service_healthy
     ports:
       - "127.0.0.1:8080:8080"
+
+  test-h2:
+    <<: *maven-test
+    profiles: [test]
+
+  test-postgres:
+    <<: *maven-test
+    profiles: [test]
+    environment:
+      TEST_DB_URL: jdbc:postgresql://postgres-test:5432/platform_test
+      TEST_DB_USER: platform_test
+      TEST_DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+
+  postgres-test:
+    image: postgres:16-alpine
+    profiles: [test]
+    environment:
+      POSTGRES_DB: platform_test
+      POSTGRES_USER: platform_test
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "platform_test", "-d", "platform_test"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+
+  tools:
+    profiles: [tools]
+    build:
+      context: .
+      target: tools
+
 volumes:
   postgres-data:
+  maven-cache:
