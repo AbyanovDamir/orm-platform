@@ -1,0 +1,10 @@
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/platform}
+    username: ${DB_USER:platform}
+    password: ${DB_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: ${DDL_AUTO:update}
+platform:
+  demo: ${DEMO_DATA:false}
