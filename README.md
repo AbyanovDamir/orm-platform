@@ -4,65 +4,73 @@
 
 **Стек** — Java 17+, Spring Boot 3.5.15, Spring Data JPA, Hibernate, PostgreSQL 16, Maven. Веб-интерфейс работает на HTML, CSS и JavaScript.
 
-## Запуск и проверка
+## Запуск и проверка на Linux
 
-Понадобятся Git, JDK 17+, Maven 3.9+, Docker с Compose v2 и PowerShell 7. Запустите Docker перед началом. Команды выполняются из корня проекта, кроме самого клонирования. Для запуска с уже установленной PostgreSQL есть отдельный раздел ниже.
+Все команды выполняйте в Bash **внутри Linux-ВМ**. Понадобятся Git, JDK 17+, Maven 3.8+, Docker Engine с Compose v2, `curl` и `jq`. Для Ubuntu и Kubuntu установите инструменты через APT:
+
+```bash
+sudo apt update
+sudo apt install -y git openjdk-17-jdk maven curl jq
+```
+
+Установите [Docker Engine и Compose v2 для Ubuntu](https://docs.docker.com/engine/install/ubuntu/) и запустите службу `sudo systemctl enable --now docker`. Если вашей учётной записи нужен `sudo` для доступа к Docker, используйте `sudo docker compose` в приведённых командах.
 
 ### 1. Клонирование
 
-Откройте PowerShell в папке, куда хотите скачать проект.
-
-```powershell
+```bash
 git clone https://github.com/AbyanovDamir/orm-platform.git
-Set-Location orm-platform
+cd orm-platform
 ```
 
-Если проект получен архивом, распакуйте его и откройте PowerShell в каталоге `orm-platform`, где лежит `pom.xml`. Продолжите со сборки.
+При работе с ZIP распакуйте его и перейдите в каталог `orm-platform`, где лежит `pom.xml`. Остальные команды выполняются из этого каталога.
 
 ### 2. Сборка
 
-```powershell
+```bash
 java -version
 mvn -version
 docker compose version
 mvn clean package -DskipTests
 ```
 
-Ожидаемый результат — `BUILD SUCCESS` и файл `target/orm-platform-1.0.0.jar`. Пропуск тестов на этом шаге позволяет запустить их отдельно на шаге 4. Docker соберёт свой JAR внутри образа, как указано в `Dockerfile`.
+Ожидаемый результат — `BUILD SUCCESS` и файл `target/orm-platform-1.0.0.jar`. Docker самостоятельно собирает JAR для своего образа.
 
 ### 3. Запуск приложения
 
-При первом запуске создайте `.env` из примера. Если файл уже существует, используйте его. Значение `DB_PASSWORD` можно изменить перед первым запуском пустой базы.
-
-```powershell
-if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+```bash
+test -f .env || cp .env.example .env
 docker compose up --build -d
 docker compose ps
 docker compose logs -f app
 ```
 
-Дождитесь строки `Started PlatformApplication`, затем нажмите **Ctrl+C**, чтобы закрыть просмотр логов. Контейнеры продолжат работать. Откройте [http://localhost:8080](http://localhost:8080). На странице должен появиться курс «Основы Hibernate». PostgreSQL слушает порт `5432` на локальном интерфейсе, приложение — порт `8080`. Оба порта должны быть свободны перед запуском.
+Пароль `DB_PASSWORD` можно изменить в `.env` до первого запуска пустой базы. Дождитесь строки `Started PlatformApplication` и закройте просмотр логов через **Ctrl+C**. Контейнеры продолжат работать. Порты `8080` и `5432` должны быть свободны внутри ВМ.
+
+Откройте [http://localhost:8080](http://localhost:8080) в браузере **внутри ВМ**. На странице должен появиться курс «Основы Hibernate». Если ВМ доступна по SSH, выполните на своём компьютере `ssh -L 8080:127.0.0.1:8080 user@vm` с адресом ВМ и именем пользователя. Оставьте SSH-сессию открытой и откройте тот же URL на своём компьютере.
 
 ### 4. Автоматические тесты
 
-Быстрый прогон на H2:
+Прогон на H2:
 
-```powershell
+```bash
 mvn verify
 ```
 
-Для прогона на PostgreSQL оставьте Compose запущенным и создайте отдельную базу `platform_test`. Если она уже есть, шаг создания можно пропустить.
+Для прогона на PostgreSQL оставьте Compose запущенным и создайте отдельную базу `platform_test`. Если она уже существует, пропустите `createdb`.
 
-```powershell
+```bash
 docker compose exec -T postgres createdb -U platform platform_test
-$env:TEST_DB_URL = 'jdbc:postgresql://localhost:5432/platform_test'
-$env:TEST_DB_USER = 'platform'
-$env:TEST_DB_PASSWORD = Read-Host 'Введите DB_PASSWORD из файла .env' -MaskInput
-mvn verify
-Remove-Item Env:TEST_DB_URL, Env:TEST_DB_USER, Env:TEST_DB_PASSWORD
+(
+  read -rsp 'Введите DB_PASSWORD из файла .env: ' TEST_DB_PASSWORD
+  printf '\n'
+  export TEST_DB_PASSWORD
+  export TEST_DB_URL='jdbc:postgresql://127.0.0.1:5432/platform_test'
+  export TEST_DB_USER='platform'
+  mvn verify
+)
 ```
 
-Профиль `test` пересоздаёт схему в указанной базе. Для ручных сценариев приложение продолжает использовать базу `platform`. Ожидаемый итог обоих прогонов — `Tests run: 19, Failures: 0, Errors: 0, Skipped: 0` и `BUILD SUCCESS`. Подробные отчёты лежат в `target/surefire-reports/`. GitHub Actions выполняет этот же набор на PostgreSQL 16 при push и pull request.
+Профиль `test` пересоздаёт схему только в указанной тестовой базе. Приложение продолжает использовать базу `platform`. Ожидаются `Tests run: 19, Failures: 0, Errors: 0, Skipped: 0`, `0 Checkstyle violations` и `BUILD SUCCESS`. Отчёты лежат в `target/surefire-reports/`.
 
 ### 5. Ручное тестирование
 
@@ -81,55 +89,52 @@ Remove-Item Env:TEST_DB_URL, Env:TEST_DB_USER, Env:TEST_DB_PASSWORD
 
 Выбор студента и демонстрационная форма оценки имитируют роли. Пользовательские сессии и вход по паролю в учебной версии отсутствуют.
 
-#### Проверка REST API в PowerShell 7
+#### Проверка REST API из терминала
 
-Команды можно выполнять после браузерного сценария. Они находят курс по названию и создают нового студента с уникальным адресом, поэтому подходят и для повторного запуска.
+Выполняйте три блока в одном терминале. Они находят курс по названию и создают временного студента с уникальным адресом.
 
 **5.1. Чтение курса и создание студента**
 
-```powershell
-$api = 'http://localhost:8080/api'
-$course = (Invoke-RestMethod "$api/courses") |
-    Where-Object title -EQ 'Основы Hibernate' | Select-Object -First 1
-$detail = Invoke-RestMethod "$api/courses/$($course.id)"
-$detail.modules | ForEach-Object { $_.module.title }
+```bash
+api='http://127.0.0.1:8080/api'
+course_id=$(curl -fsS "$api/courses" |
+  jq -er 'first(.[] | select(.title == "Основы Hibernate") | .id)')
+curl -fsS "$api/courses/$course_id" | jq -r '.modules[].module.title'
 
-$userBody = @{
-    name = 'REST Student'
-    email = "rest-$([guid]::NewGuid())@example.org"
-    role = 'STUDENT'
-} | ConvertTo-Json
-$created = Invoke-WebRequest "$api/users" -Method Post -ContentType 'application/json' -Body $userBody
-$created.StatusCode
-$student = $created.Content | ConvertFrom-Json
+email="rest-$(cat /proc/sys/kernel/random/uuid)@example.org"
+user_json() {
+  jq -nc --arg name "$1" --arg email "$email" '{name:$name,email:$email,role:"STUDENT"}'
+}
+created=$(curl -fsS -w '\n%{http_code}' -X POST -H 'Content-Type: application/json' \
+  --data "$(user_json 'REST Student')" "$api/users")
+printf '%s\n' "$created" | tail -n 1
+student_id=$(printf '%s\n' "$created" | head -n 1 | jq -er '.id')
 ```
 
-Ожидаются названия «Модель данных», «Ленивая загрузка» и код `201` при создании студента.
+Ожидаются названия «Модель данных», «Ленивая загрузка» и код `201`.
 
-**5.2. Запись на курс, повторная запись и ошибки API**
+**5.2. Запись на курс и ошибки API**
 
-```powershell
-$enrollment = "$api/courses/$($course.id)/enrollments/$($student.id)"
-(Invoke-WebRequest $enrollment -Method Post).StatusCode
-(Invoke-WebRequest $enrollment -Method Post -SkipHttpErrorCheck).StatusCode
-(Invoke-RestMethod "$api/users/$($student.id)/enrollments") | Format-Table courseTitle, status
-
-(Invoke-WebRequest "$api/courses/9223372036854775807" -SkipHttpErrorCheck).StatusCode
-(Invoke-WebRequest "$api/users" -Method Post -ContentType 'application/json' -Body '{}' -SkipHttpErrorCheck).StatusCode
+```bash
+status() { curl -sS -o /dev/null -w '%{http_code}\n' "$@"; }
+enrollment="$api/courses/$course_id/enrollments/$student_id"
+status -X POST "$enrollment"
+status -X POST "$enrollment"
+curl -fsS "$api/users/$student_id/enrollments" | jq '.[] | {courseTitle, status}'
+status "$api/courses/9223372036854775807"
+status -X POST -H 'Content-Type: application/json' --data '{}' "$api/users"
 ```
 
-Ожидаются `201` при первой записи, `409` при повторной, одна запись со статусом `ACTIVE`, `404` для отсутствующего курса и `400` для пустого тела пользователя.
+Ожидаются коды `201`, `409`, одна запись со статусом `ACTIVE`, затем `404` и `400`.
 
 **5.3. Обновление и удаление данных ручной проверки**
 
-```powershell
-$updatedBody = $userBody | ConvertFrom-Json
-$updatedBody.name = 'REST Student Updated'
-$updatedJson = $updatedBody | ConvertTo-Json
-(Invoke-RestMethod "$api/users/$($student.id)" -Method Put -ContentType 'application/json' -Body $updatedJson).name
-(Invoke-WebRequest $enrollment -Method Delete).StatusCode
-(Invoke-WebRequest "$api/users/$($student.id)" -Method Delete).StatusCode
-(Invoke-WebRequest "$api/users/$($student.id)" -SkipHttpErrorCheck).StatusCode
+```bash
+curl -fsS -X PUT -H 'Content-Type: application/json' \
+  --data "$(user_json 'REST Student Updated')" "$api/users/$student_id" | jq -r '.name'
+status -X DELETE "$enrollment"
+status -X DELETE "$api/users/$student_id"
+status "$api/users/$student_id"
 ```
 
 Ожидаются новое имя, два ответа `204` и `404` после удаления пользователя.
@@ -138,14 +143,14 @@ $updatedJson = $updatedBody | ConvertTo-Json
 
 Остановить и удалить контейнеры проекта, сохранив данные PostgreSQL:
 
-```powershell
+```bash
 docker compose down
 mvn clean
 ```
 
 Начать с чистых демоданных можно, удалив том PostgreSQL и локальный образ приложения. Эта команда удаляет **все** данные PostgreSQL данного Compose-проекта, включая ручные работы и тестовую базу:
 
-```powershell
+```bash
 docker compose down --volumes --rmi local
 mvn clean
 ```
@@ -154,7 +159,7 @@ mvn clean
 
 ## Запуск с установленной PostgreSQL
 
-В интерактивном `psql` от администратора базы создайте роль и базу:
+В интерактивном `psql` от администратора базы создайте роль и базу.
 
 ```sql
 CREATE ROLE platform LOGIN;
@@ -164,19 +169,17 @@ CREATE DATABASE platform OWNER platform;
 
 Из корня проекта после сборки выполните:
 
-```powershell
-$env:DB_PASSWORD = Read-Host 'Пароль роли platform' -MaskInput
-$env:DEMO_DATA = 'true'
-java -jar target/orm-platform-1.0.0.jar
+```bash
+(
+  read -rsp 'Пароль роли platform: ' DB_PASSWORD
+  printf '\n'
+  export DB_PASSWORD
+  export DEMO_DATA=true
+  java -jar target/orm-platform-1.0.0.jar --server.address=127.0.0.1
+)
 ```
 
-По умолчанию используется `jdbc:postgresql://localhost:5432/platform` и роль `platform`. Для другой конфигурации задайте `DB_URL` и `DB_USER`. Профиль `dev` создаёт схему через Hibernate. При повторном запуске загрузчик проверяет наличие демо-преподавателя. Приложение можно остановить сочетанием **Ctrl+C**.
-
-На Windows при ошибке Tomcat `Unable to establish loopback connection` запустите JAR на JDK 17 с командой ниже. Путь `no-socket-dir` должен отсутствовать.
-
-```powershell
-java "-Djdk.net.unixdomain.tmpdir=$PWD/no-socket-dir" -jar target/orm-platform-1.0.0.jar
-```
+По умолчанию используется `jdbc:postgresql://localhost:5432/platform` и роль `platform`. Для другого подключения задайте `DB_URL` и `DB_USER`. Hibernate создаёт схему при запуске. Остановить приложение можно сочетанием **Ctrl+C**.
 
 ## Модель и правила
 
