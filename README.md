@@ -6,14 +6,12 @@
 
 ## Запуск и проверка на Linux
 
-Все команды выполняйте в Bash **внутри Linux-ВМ**. Понадобятся Git, JDK 17+, Maven 3.8+, Docker Engine с Compose v2, `curl` и `jq`. Для Ubuntu и Kubuntu инструменты можно установить через APT.
+Все команды выполняйте в Bash **внутри Linux-ВМ**. Понадобятся Git для клонирования и Docker Engine с Compose v2. Сборка, запуск и тесты используют Java 17 и Maven внутри контейнеров. Для ручных проверок API предусмотрен контейнер с `curl` и `jq`.
 
 ```bash
 sudo apt update
-sudo apt install -y git openjdk-17-jdk maven curl jq
+sudo apt install -y git
 ```
-
-Если APT ожидает блокировку `dpkg`, дождитесь завершения системного обновления. Для сборки также подходят переносные JDK и Maven. Укажите каталог JDK в `JAVA_HOME` и добавьте каталоги `bin` обоих инструментов в `PATH`.
 
 Проверьте доступ к установленному Docker командой `docker info`. Если Docker ещё не установлен, следуйте инструкции для [Docker Engine и Compose v2 на Ubuntu](https://docs.docker.com/engine/install/ubuntu/). Если в вашей ВМ Docker требует `sudo`, выполняйте команды как `sudo docker compose …` и вводите пароль в терминале ВМ при запросе.
 
@@ -31,29 +29,28 @@ cd orm-platform
 ### 2. Сборка
 
 ```bash
-java -version
-mvn -version
 docker compose version
-mvn clean package -DskipTests
+test -f .env || cp .env.example .env
+docker compose build app
 ```
 
-Ожидаемый результат — `BUILD SUCCESS` и файл `target/orm-platform-1.0.0.jar`. Docker самостоятельно собирает JAR для своего образа.
+Docker собирает JAR во временном слое Maven и помещает его в образ приложения. При первом запуске Docker скачивает базовые образы, а Maven загружает зависимости.
 
 ### 3. Запуск приложения
 
 ```bash
-test -f .env || cp .env.example .env
-docker compose up --build -d
+docker compose up -d
 docker compose ps
 docker compose logs -f app
 ```
 
-Пароль `DB_PASSWORD` можно изменить в `.env` до первого запуска пустой базы. Порты `8080` и `5432` должны быть свободны внутри ВМ. При первом запуске Docker скачивает образы, а Maven загружает зависимости. На ВМ старт Spring Boot после сборки занял около минуты.
+Пароль `DB_PASSWORD` можно изменить в `.env` до первого запуска пустой базы. Порты `8080` и `5432` должны быть свободны внутри ВМ. На ВМ старт Spring Boot после сборки занял около минуты.
 
 Дождитесь строки `Started PlatformApplication` и закройте просмотр логов через **Ctrl+C**. Контейнеры продолжат работать. Проверьте, что API возвращает демокурс.
 
 ```bash
-curl -fsS http://127.0.0.1:8080/api/courses | jq -r '.[].title'
+docker compose run --build --rm -T tools bash -o pipefail -ec \
+  "curl -fsS http://app:8080/api/courses | jq -r '.[].title'"
 ```
 
 Ожидается строка «Основы Hibernate». Если до этой проверки соединение сбрасывается или список ещё пуст, подождите несколько секунд и повторите запрос. При повторяющейся ошибке проверьте состояния контейнеров и последние логи через `docker compose ps` и `docker compose logs --tail=50 app postgres`.
@@ -62,27 +59,16 @@ curl -fsS http://127.0.0.1:8080/api/courses | jq -r '.[].title'
 
 ### 4. Автоматические тесты
 
-Прогон на H2:
+Запустите оба набора из каталога проекта. Каждый контейнер выполняет `mvn verify`.
 
 ```bash
-mvn verify
+docker compose run --build --rm -T test-h2
+docker compose run --build --rm -T test-postgres
 ```
 
-Для прогона на PostgreSQL оставьте Compose запущенным и создайте отдельную базу `platform_test`. Если она уже существует, пропустите `createdb`.
+`test-h2` использует встроенную H2. `test-postgres` сам запускает отдельный PostgreSQL с базой `platform_test` и ждёт её готовности. Данные тестовой базы хранятся в памяти. Оба прогона используют общий кеш зависимостей Maven в томе Compose.
 
-```bash
-docker compose exec -T postgres createdb -U platform platform_test
-(
-  read -rsp 'Введите DB_PASSWORD из файла .env: ' TEST_DB_PASSWORD
-  printf '\n'
-  export TEST_DB_PASSWORD
-  export TEST_DB_URL='jdbc:postgresql://127.0.0.1:5432/platform_test'
-  export TEST_DB_USER='platform'
-  mvn verify
-)
-```
-
-Профиль `test` пересоздаёт схему только в указанной тестовой базе. Приложение продолжает использовать базу `platform`. Ожидаются `Tests run: 19, Failures: 0, Errors: 0, Skipped: 0`, `0 Checkstyle violations` и `BUILD SUCCESS`. Отчёты лежат в `target/surefire-reports/`.
+В выводе каждого прогона ожидаются `Tests run: 19, Failures: 0, Errors: 0, Skipped: 0`, `0 Checkstyle violations` и `BUILD SUCCESS`.
 
 ### 5. Ручное тестирование
 
@@ -103,12 +89,18 @@ docker compose exec -T postgres createdb -U platform platform_test
 
 #### Проверка REST API из терминала
 
-Выполняйте три блока в одном терминале. Они находят курс по названию и создают временного студента с уникальным адресом.
+Запустите оболочку с `curl` и `jq` в сети Compose.
+
+```bash
+docker compose run --build --rm tools
+```
+
+Выполняйте следующие три блока в этой оболочке. Они находят курс по названию и создают временного студента с уникальным адресом. После проверки выйдите командой `exit`.
 
 **5.1. Чтение курса и создание студента**
 
 ```bash
-api='http://127.0.0.1:8080/api'
+api='http://app:8080/api'
 course_id=$(curl -fsS "$api/courses" |
   jq -er 'first(.[] | select(.title == "Основы Hibernate") | .id)')
 curl -fsS "$api/courses/$course_id" | jq -r '.modules[].module.title'
@@ -156,42 +148,16 @@ status "$api/users/$student_id"
 Остановить и удалить контейнеры проекта, сохранив данные PostgreSQL:
 
 ```bash
-docker compose down
-mvn clean
+docker compose --profile test down
 ```
 
-Начать с чистых демоданных можно, удалив том PostgreSQL и локальный образ приложения. Эта команда удаляет **все** данные PostgreSQL данного Compose-проекта, включая ручные работы и тестовую базу:
+Для сброса демоданных удалите тома проекта. Команда удалит **все** данные PostgreSQL этого Compose-проекта, включая ручные работы, и кеш Maven.
 
 ```bash
-docker compose down --volumes --rmi local
-mvn clean
+docker compose --profile test --profile tools down --volumes
 ```
 
 Для нового запуска повторите шаг 3. После удаления тома приложение создаст схему и демоданные при старте.
-
-## Запуск с установленной PostgreSQL
-
-В интерактивном `psql` от администратора базы создайте роль и базу.
-
-```sql
-CREATE ROLE platform LOGIN;
-\password platform
-CREATE DATABASE platform OWNER platform;
-```
-
-Из корня проекта после сборки выполните:
-
-```bash
-(
-  read -rsp 'Пароль роли platform: ' DB_PASSWORD
-  printf '\n'
-  export DB_PASSWORD
-  export DEMO_DATA=true
-  java -jar target/orm-platform-1.0.0.jar --server.address=127.0.0.1
-)
-```
-
-По умолчанию используется `jdbc:postgresql://localhost:5432/platform` и роль `platform`. Для другого подключения задайте `DB_URL` и `DB_USER`. Hibernate создаёт схему при запуске. Остановить приложение можно сочетанием **Ctrl+C**.
 
 ## Модель и правила
 
@@ -283,13 +249,13 @@ POST /api/quizzes/1/attempts
 
 15 интеграционных тестов проверяют схему, CRUD, каскадное удаление, уникальность записи, дедлайн, сдачу и оценивание работ, прохождение теста, отзывы, HTTP-валидацию и поведение LAZY. Четыре модульных теста проверяют правила начисления баллов.
 
-На ВМ с Kubuntu все 19 тестов прошли отдельно на H2 и PostgreSQL 16.16. Checkstyle показал 0 нарушений. Приложение запустилось в Docker Compose, главная страница открылась в Firefox, а команды ручной проверки REST API вернули ожидаемые результаты.
+На ВМ с Kubuntu подтвердили запуск приложения через Docker Compose и открыли главную страницу в Firefox. Ручной сценарий REST API вернул ожидаемые результаты. Тесты на H2 и PostgreSQL 16.16 прошли на этой ВМ с переносным Maven. Нынешние команды Compose выполняют тот же набор внутри контейнеров.
 
 ## Публикация для сдачи
 
 ### Проверки и доставка сборки
 
-Workflow [Verify and deliver](https://github.com/AbyanovDamir/orm-platform/actions/workflows/ci.yml) запускает тесты на PostgreSQL 16, проверяет исходный и тестовый код через Checkstyle и проверяет запуск демопроекта через Docker Compose. После успешной сборки JAR доступен в разделе Artifacts у запуска workflow.
+Workflow [Verify and deliver](https://github.com/AbyanovDamir/orm-platform/actions/workflows/ci.yml) запускает те же контейнеры тестов на H2 и PostgreSQL 16, выполняет Checkstyle и проверяет запуск демопроекта. После успешной сборки JAR доступен в разделе Artifacts у запуска workflow.
 
 При отправке тега с префиксом `v`, например `v1.0.0`, workflow публикует образ в GitHub Container Registry после прохождения обеих проверок. У образа будет тот же тег, например `ghcr.io/abyanovdamir/orm-platform:v1.0.0`. Доступ к скачиванию регулируется видимостью пакета на GitHub.
 
