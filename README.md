@@ -27,9 +27,9 @@ cd orm-platform
 ### 2. Сборка
 
 ```bash
-docker compose version
-test -f .env || cp .env.example .env
-docker compose build app
+sudo docker compose version
+sudo test -f .env || sudo cp .env.example .env
+sudo docker compose build app
 ```
 
 Docker собирает JAR во временном слое Maven и помещает его в образ приложения. При первом запуске Docker скачивает базовые образы, а Maven загружает зависимости.
@@ -37,9 +37,9 @@ Docker собирает JAR во временном слое Maven и помещ
 ### 3. Запуск приложения
 
 ```bash
-docker compose up -d
-docker compose ps
-docker compose logs -f app
+sudo docker compose up -d
+sudo docker compose ps
+sudo docker compose logs -f app
 ```
 
 Пароль `DB_PASSWORD` можно изменить в `.env` до первого запуска пустой базы. Порты `8080` и `5432` должны быть свободны внутри ВМ. На ВМ старт Spring Boot после сборки занял около минуты.
@@ -47,7 +47,7 @@ docker compose logs -f app
 Дождитесь строки `Started PlatformApplication` и закройте просмотр логов через **Ctrl+C**. Контейнеры продолжат работать. Проверьте, что API возвращает демокурс.
 
 ```bash
-docker compose run --build --rm -T tools bash -o pipefail -ec \
+sudo docker compose run --build --rm -T tools bash -o pipefail -ec \
   "curl -fsS http://app:8080/api/courses | jq -r '.[].title'"
 ```
 
@@ -60,8 +60,8 @@ docker compose run --build --rm -T tools bash -o pipefail -ec \
 Запустите оба набора из каталога проекта. Каждый контейнер выполняет `mvn verify`.
 
 ```bash
-docker compose run --build --rm -T test-h2
-docker compose run --build --rm -T test-postgres
+sudo docker compose run --build --rm -T test-h2
+sudo docker compose run --build --rm -T test-postgres
 ```
 
 `test-h2` использует встроенную H2. `test-postgres` сам запускает отдельный PostgreSQL с базой `platform_test` и ждёт её готовности. Данные тестовой базы хранятся в памяти. Оба прогона используют общий кеш зависимостей Maven в томе Compose.
@@ -90,7 +90,7 @@ docker compose run --build --rm -T test-postgres
 Запустите оболочку с `curl` и `jq` в сети Compose.
 
 ```bash
-docker compose run --build --rm tools
+sudo docker compose run --build --rm tools
 ```
 
 Выполняйте следующие три блока в этой оболочке. Они находят курс по названию и создают временного студента с уникальным адресом. После проверки выйдите командой `exit`.
@@ -146,13 +146,13 @@ status "$api/users/$student_id"
 Остановить и удалить контейнеры проекта, сохранив данные PostgreSQL:
 
 ```bash
-docker compose --profile test down
+sudo docker compose --profile test down
 ```
 
 Для сброса демоданных удалите тома проекта. Команда удалит **все** данные PostgreSQL этого Compose-проекта, включая ручные работы, и кеш Maven.
 
 ```bash
-docker compose --profile test --profile tools down --volumes
+sudo docker compose --profile test --profile tools down --volumes
 ```
 
 Для нового запуска повторите шаг 3. После удаления тома приложение создаст схему и демоданные при старте.
